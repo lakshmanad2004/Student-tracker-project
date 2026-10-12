@@ -1,3 +1,4 @@
+
 const form = document.querySelector('#project-form');
 const nameInput = document.querySelector('#name');
 const statusInput = document.querySelector('#status');
@@ -83,7 +84,7 @@ function renderProjects() {
     editButton.disabled = isBusy;
 
     editButton.addEventListener('click', () => {
-      if (isBusy) {
+      if (isBusy || loadFailed) {
         return;
       }
 
@@ -112,7 +113,7 @@ function renderProjects() {
     deleteButton.disabled = isBusy;
 
     deleteButton.addEventListener('click', async () => {
-      if (isBusy) {
+      if (isBusy || loadFailed) {
         return;
       }
 
@@ -149,8 +150,8 @@ function renderProjects() {
     projectList.appendChild(listItem);
   });
 
-  emptyState.hidden = projects.length > 0;
   emptyState.textContent = 'No projects added yet.';
+  emptyState.hidden = projects.length > 0;
 }
 
 async function loadProjects(options = {}) {
@@ -168,7 +169,10 @@ async function loadProjects(options = {}) {
 
     if (!response.ok) {
       throw new Error(
-        getErrorMessage(data, `Could not load projects (HTTP ${response.status}).`)
+        getErrorMessage(
+          data,
+          `Could not load projects (HTTP ${response.status}).`
+        )
       );
     }
 
@@ -206,6 +210,7 @@ async function loadProjects(options = {}) {
       !projects.some(project => String(project.id) === String(editingId))
     ) {
       resetForm();
+      renderProjects();
       showMessage('The project being edited no longer exists.');
     } else {
       renderProjects();
@@ -224,6 +229,8 @@ async function loadProjects(options = {}) {
     loadFailed = true;
     projects = [];
     projectList.replaceChildren();
+
+    // A failed load is an error, not an empty project collection.
     emptyState.hidden = true;
 
     const prefix = successMessage
@@ -255,7 +262,12 @@ async function saveProject(projectData, projectId = null) {
   }
 
   setBusy(true);
-  showMessage(projectId === null ? 'Saving new project...' : 'Saving project changes...');
+
+  showMessage(
+    projectId === null
+      ? 'Saving new project...'
+      : 'Saving project changes...'
+  );
 
   const isEditing = projectId !== null;
   const url = isEditing
@@ -282,18 +294,19 @@ async function saveProject(projectData, projectId = null) {
       );
     }
 
+    // The save succeeded. Reset only after the server confirms it.
     resetForm();
 
     const successText = isEditing
       ? 'Project updated successfully.'
       : 'Project created successfully.';
 
-    await loadProjects({
+    const refreshed = await loadProjects({
       keepBusy: true,
       successMessage: successText
     });
 
-    if (successText && !loadFailed) {
+    if (refreshed) {
       nameInput.focus();
     }
   } catch (error) {
